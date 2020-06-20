@@ -267,7 +267,7 @@ class  Tdx(Base):
 
     @retry(stop_max_attempt_number=3, wait_random_min=50, wait_random_max=100)
     def __hq_list(self, market):
-        assert self.__ex.qsize() > 0
+        assert self.__hq.qsize() > 0
         api = TdxHq_API()
         ip, port = self.__hq.get()
         with api.connect(ip, port):

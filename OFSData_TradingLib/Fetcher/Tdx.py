@@ -41,6 +41,7 @@ class  Tdx(Base):
     MAX_KLINE_COUNT = 800
 
     HQ_HOSTS = {
+        ('58.210.106.111', 7709),
         ('106.120.74.86', 7709),
         ('112.95.140.74', 7709),
         ('112.95.140.92', 7709),
@@ -277,6 +278,7 @@ class  Tdx(Base):
             api.disconnect()
             self.__hq.put((ip, port))
             df = pandas.concat(df, sort=False).assign(sse=market)
+            df = df[['code', 'volunit', 'decimal_point', 'name', 'pre_close', 'sse']].dropna()
             df = df.assign(sse='sh' if market == CODE_MARKET_SH else 'sz', sec=get_code_type(df.code.tolist(), market))
             return df
         return None

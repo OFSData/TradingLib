@@ -8,7 +8,7 @@ from fastcache import lru_cache
 from retrying import retry
 import datetime, pandas
 
-class  Tdx(Base):
+class Tdx(Base):
     # K线种类
     # 0 -   5 分钟K 线
     KLINE_5MIN = 0
@@ -145,12 +145,29 @@ class  Tdx(Base):
     def __code(self, code):
         return list(set([str(code)] if isinstance(code, str) or isinstance(code, int) else [] if code is None else list(map(lambda x:str(x), code))))
 
-    def __day_offset(self, start, end, nums):
+    def __day_offset(self, start, end, nums, frequency):
         _offset = len(days_trade_range(start=None))//nums
         _start = len(days_trade_range(start=start))//nums
         _end = len(days_trade_range(start=end))//nums
         #print(_offset,  _start, _end, _offset-_start, _offset-_end+1)
         return [(i*nums, nums) for i in range(_offset, -1, -1)][_offset-_start:_offset-_end+1]
+
+    def __min_offset(self, start, end, nums, frequency):
+        if frequency == 0:
+            lens = 48
+        else:
+            lens = 240
+        _start = days_trade_range(start=start)
+        if len(_start)*lens > 21600:
+            _start = _start[int(21600/lens):]
+        _start = len(_start)*lens
+        _end = days_trade_range(start=end)
+        if len(_end)*lens > 21600:
+            _end = _end[int(21600/lens):]
+        _end = len(_end)*lens
+        if _start == _end:
+            _end -= lens
+        return [((i, nums)) for i in range(_end-lens, _start, nums)]
 
     @retry(stop_max_attempt_number=3, wait_random_min=50, wait_random_max=100)
     def __hq_bars(self, code, offset, frequency=9, index=False):
@@ -176,13 +193,19 @@ class  Tdx(Base):
             return pandas.concat(df, sort=False)
 
     def __paralle_hq_bars(self, code, start=None, end=datetime.datetime.today(), count=0, frequency=9, index=False):
+        if frequency == self.KLINE_RI_K:
+            func = self.__day_offset
+        elif frequency == self.KLINE_1MIN:
+            func = self.__min_offset
+        else:
+            return None
+        code = self.__code(code)
         days = days_trade_range(start=start, end=end, count=count)
         start, end=days[0], days[-1]
-        code = self.__code(code)
-        csize = len(code)
-        offset=self.__day_offset(start=start, end=end, nums=800)
+        offset=func(start=start, end=end, nums=800, frequency=frequency)
         #print(offset)
         
+        csize = len(code)
         self.__paralle_hq_ping()
         if csize == 1:#单线程
             df = self.__hq_bars(code=code, offset=offset, frequency=frequency, index=index)
@@ -199,22 +222,34 @@ class  Tdx(Base):
                     self.__tasks.add(self.__hq_bars, code=code[0:_code], offset=offset, frequency=frequency, index=index)
                     code = code[_code:]
             df = pandas.concat(self.__tasks.executor(), sort=False)
-        df = df.assign(volume=df.vol, datetime=pandas.to_datetime(df['datetime']).dt.date)
+        df = df.assign(volume=df.vol, datetime=pandas.to_datetime(df['datetime']))
         df = df[['datetime','code','open','high','low','close','volume','amount']].set_index(['datetime', 'code']).sort_index()
-        df = df[df.index.get_level_values(0).isin(days)]
+        df = df[pandas.to_datetime(df.index.get_level_values(0).strftime('%Y-%m-%d')).isin(days)]
         return df
 
     def stock_day(self, code, start=None, end=datetime.datetime.today(), count=0, fq=None):
         return self.__paralle_hq_bars(code, start=start, end=end, count=count, frequency=self.KLINE_RI_K, index=False)
 
+    def stock_min(self, code, start=None, end=datetime.datetime.today(), frequency=8):
+        return self.__paralle_hq_bars(code=code, start=start, end=end, count=0, frequency=frequency, index=False)
+
     def etf_day(self, code, start=None, end=datetime.datetime.today(), count=0):
         return self.stock_day(code, start=start, end=end, count=count)
+
+    def etf_min(self, code, start=None, end=datetime.datetime.today(), frequency=8):
+        return self.stock_min(code, start=start, end=end, frequency=frequency)
 
     def index_day(self, code, start=None, end=datetime.datetime.today(), count=0):
         return self.__paralle_hq_bars(code, start=start, end=end, count=count, frequency=self.KLINE_RI_K, index=True)
 
+    def index_min(self, code, start=None, end=datetime.datetime.today(), frequency=8):
+        return self.__paralle_hq_bars(code=code, start=start, end=end, count=0, frequency=frequency, index=True)
+
     def bond_day(self, code, start=None, end=datetime.datetime.today(), count=0):
         return self.stock_day(code, start=start, end=end, count=count)
+
+    def bond_min(self, code, start=None, end=datetime.datetime.today(), frequency=8):
+        return self.stock_min(code, start=start, end=end, frequency=frequency)
 
     @retry(stop_max_attempt_number=3, wait_random_min=50, wait_random_max=100)
     def __exhq_bars(self, code, offset, frequency=9):
@@ -233,11 +268,19 @@ class  Tdx(Base):
             return pandas.concat(df, sort=False)
 
     def __paralle_exhq_bars(self, code, start=None, end=datetime.datetime.today(), count=0, frequency=9):
+        if frequency == self.KLINE_RI_K:
+            func = self.__day_offset
+        elif frequency == self.KLINE_1MIN:
+            func = self.__min_offset
+        else:
+            return None
+        code = self.__code(code)
         days = days_trade_range(start=start, end=end, count=count)
         start, end=days[0], days[-1]
-        code = self.__code(code)
+        offset=func(start=start, end=end, nums=800, frequency=frequency)
+        #print(offset)
+        
         csize = len(code)
-        offset=self.__day_offset(start=start, end=end, nums=700)
         
         self.__exhq_list()
         if csize == 1:#单线程
@@ -255,16 +298,19 @@ class  Tdx(Base):
                     self.__tasks.add(self.__exhq_bars,  code=code[0:_code], offset=offset, frequency=frequency)
                     code = code[_code:]
             df = pandas.concat(self.__tasks.executor(), sort=False)
-        df = df.assign(datetime=pandas.to_datetime(df['datetime']).dt.date)
+        df = df.assign(datetime=pandas.to_datetime(df['datetime']))
         df = df[['datetime','code','open','high','low','close','position','trade','price','amount']].set_index(['datetime', 'code']).sort_index()
-        df = df[df.index.get_level_values(0).isin(days)]
+        df = df[pandas.to_datetime(df.index.get_level_values(0).strftime('%Y-%m-%d')).isin(days)]
         return df
 
     def fund_day(self, code, start=None, end=datetime.datetime.today(), count=0):
         return self.__paralle_exhq_bars(code=code, start=start, end=end, count=count, frequency=self.KLINE_RI_K)
 
     def option_day(self, code, start=None, end=datetime.datetime.today(), count=0):
-        return self.fund_day(code, start=start, end=end, count=count)
+        return self.fund_day(code=code, start=start, end=end, count=count)
+
+    def option_min(self, code, start=None, end=datetime.datetime.today(), frequency=8):
+        return self.__paralle_exhq_bars(code=code, start=start, end=end, count=0, frequency=frequency)
 
     @retry(stop_max_attempt_number=3, wait_random_min=50, wait_random_max=100)
     def __hq_list(self, market):
@@ -360,7 +406,7 @@ class  Tdx(Base):
         return df
 
     @retry(stop_max_attempt_number=3, wait_random_min=50, wait_random_max=100)
-    def tick(self,  stock=None,  index=None, etf=None, bond=None):
+    def tick(self, stock=None, index=None, etf=None, bond=None):
         code = set()
         code = code | set(map(lambda x:(get_code_market(x), x), self.__code(stock)))
         code = code | set(map(lambda x:(get_code_market(x), x), self.__code(etf)))
@@ -372,3 +418,9 @@ Fetcher = Tdx()
 
 if __name__ == '__main__':
     print(Fetcher.tick(stock=['000001', 600000], index='000001', etf=['510050', '510300', '510500'], bond=113571))
+    #df = Fetcher.stock_day(code='000001',count=1)
+    #print(df)
+    #df = Fetcher.stock_min(code='000001',start='2020-01-01',end='2020-09-15')
+    #print(df)
+    #df = Fetcher.index_min(code='000001',start='2020-09-14',end='2020-09-15')
+    #print(df)

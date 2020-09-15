@@ -167,7 +167,7 @@ class Tdx(Base):
         _end = len(_end)*lens
         if _start == _end:
             _end -= lens
-        return [((i, nums)) for i in range(_end-lens, _start, nums)]
+        return [((i, nums)) for i in range(_end-lens if _end >= lens else _end, _start, nums)]
 
     @retry(stop_max_attempt_number=3, wait_random_min=50, wait_random_max=100)
     def __hq_bars(self, code, offset, frequency=9, index=False):
@@ -282,7 +282,8 @@ class Tdx(Base):
         
         csize = len(code)
         
-        self.__exhq_list()
+        #self.__exhq_list()
+        self.__paralle_exhq_ping()
         if csize == 1:#单线程
             df = self.__exhq_bars(code=code, offset=offset, frequency=frequency)
         else:
@@ -304,13 +305,19 @@ class Tdx(Base):
         return df
 
     def fund_day(self, code, start=None, end=datetime.datetime.today(), count=0):
-        return self.__paralle_exhq_bars(code=code, start=start, end=end, count=count, frequency=self.KLINE_RI_K)
+        return self.option_day(code=code, start=start, end=end, count=count)
 
     def option_day(self, code, start=None, end=datetime.datetime.today(), count=0):
-        return self.fund_day(code=code, start=start, end=end, count=count)
+        return self.__paralle_exhq_bars(code=code, start=start, end=end, count=count, frequency=self.KLINE_RI_K)
 
     def option_min(self, code, start=None, end=datetime.datetime.today(), frequency=8):
         return self.__paralle_exhq_bars(code=code, start=start, end=end, count=0, frequency=frequency)
+
+    def ifuture_day(self, code, start=None, end=datetime.datetime.today(), count=0):
+        return self.option_day(code=code, start=start, end=end, count=count)
+
+    def ifuture_min(self, code, start=None, end=datetime.datetime.today(), frequency=8):
+        return self.option_min(code=code, start=start, end=end, frequency=frequency)
 
     @retry(stop_max_attempt_number=3, wait_random_min=50, wait_random_max=100)
     def __hq_list(self, market):
@@ -378,6 +385,11 @@ class Tdx(Base):
         df = df[(df.name.str[:6]==code) & (df.category.isin([1, 12])) & (df.market.isin([1,8,9]))]
         return df
 
+    def ifuture_list(self,  code=None):
+        df = self.__exhq_list()
+        df = df[(df.category==3) & (df.market==47) & (df.index.str.len()==6)]
+        return df if code is None else df[df.index.str.startswith(code.upper())]
+
     def __hq_tick(self, code):
         api = TdxHq_API()
         ip, port = self.__hq.get()
@@ -412,6 +424,7 @@ class Tdx(Base):
         code = code | set(map(lambda x:(get_code_market(x), x), self.__code(etf)))
         code = code | set(map(lambda x:(get_index_market(x), x), self.__code(index)))
         code = code | set(map(lambda x:(get_code_market(x), x), self.__code(bond)))
+        print(code)
         return self.__paralle_hq_tick(code=code)
 
 Fetcher = Tdx()
@@ -423,4 +436,6 @@ if __name__ == '__main__':
     #df = Fetcher.stock_min(code='000001',start='2020-01-01',end='2020-09-15')
     #print(df)
     #df = Fetcher.index_min(code='000001',start='2020-09-14',end='2020-09-15')
+    #print(df)
+    #df = Fetcher.ifuture_min(code='IC2009', start='2020-09-15')
     #print(df)

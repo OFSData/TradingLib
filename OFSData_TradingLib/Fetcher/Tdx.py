@@ -424,7 +424,7 @@ class Tdx(Base):
         code = code | set(map(lambda x:(get_code_market(x), x), self.__code(etf)))
         code = code | set(map(lambda x:(get_index_market(x), x), self.__code(index)))
         code = code | set(map(lambda x:(get_code_market(x), x), self.__code(bond)))
-        print(code)
+        #print(code)
         return self.__paralle_hq_tick(code=code)
 
 Fetcher = Tdx()

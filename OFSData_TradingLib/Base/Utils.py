@@ -22,13 +22,13 @@ def get_code_market(code):
 
     code = code.lower()
     #if code.startswith(('102', '110', '113', '120', '122', '124', '130', '132', '133', '134', '136', '140', '141', '143', '144', '147', '148', '510', '511', '512', '513', '515', '518', '600', '601', '603', '605', '688')):
-    if code.startswith(('110', '113', '510', '511', '512', '513', '515', '518', '600', '601', '603', '605')):
+    if code.startswith(('110', '113', '510', '511', '512', '513', '515', '518', '588', '600', '601', '603', '605')):
         return CODE_MARKET_SH
     #elif code.startswith(('000', '001', '002', '003', '101', '104', '105', '106', '107', '108', '109', '111', '112', '114', '115', '116', '117', '118', '119', '123', '127', '128', '131', '139', '159', '300')):
     elif code.startswith(('000', '001', '002', '003', '123', '127', '128', '159', '300')):
         return CODE_MARKET_SZ
     else:
-        raise AssertionError()
+        raise AssertionError(code)
 
 def get_code_type(code, market):
     if isinstance(code, list):
@@ -43,7 +43,7 @@ def get_code_type(code, market):
             return 'stockB_cn'
         elif code.startswith(('000', '880')):
             return 'index_cn'
-        elif code.startswith(('510', '511', '512', '513', '515', '518')):
+        elif code.startswith(('510', '511', '512', '513', '515', '518', '588')):
             return 'etf_cn'
         #elif code.startswith(('102', '110', '113', '120', '122', '124', '130', '132', '133', '134', '135', '136', '140', '141', '143', '144', '147', '148')):
         elif code.startswith(('110', '113', '126')):#只保留可转债

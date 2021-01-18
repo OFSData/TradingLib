@@ -390,6 +390,7 @@ class Tdx(Base):
         df = df[(df.category==3) & (df.market==47) & (df.index.str.len()==6)]
         return df if code is None else df[df.index.str.startswith(code.upper())]
 
+    @retry(stop_max_attempt_number=3, wait_random_min=50, wait_random_max=100)
     def __hq_tick(self, code):
         api = TdxHq_API()
         ip, port = self.__hq.get()
